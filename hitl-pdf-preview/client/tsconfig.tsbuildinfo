@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/epubviewer.tsx","./src/components/thumbnailsidebar.tsx","./src/components/toolbar.tsx","./src/components/uploadzone.tsx","./src/hooks/useconvert.ts","./src/hooks/useepub.ts","./src/types/index.ts"],"version":"5.9.3"}
