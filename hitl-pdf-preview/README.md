@@ -8,12 +8,12 @@ Converts PDFs to EPUB server-side and renders them using `epub.js` — exactly t
 
 ## Prerequisites
 
-| Tool | Version | Check |
-|---|---|---|
-| Python | 3.12+ | `python3 --version` |
-| pip | any | `pip3 --version` |
-| Node.js | 18+ | `node --version` |
-| npm | any | `npm --version` |
+| Tool    | Version | Check               |
+| ------- | ------- | ------------------- |
+| Python  | 3.12+   | `python3 --version` |
+| pip     | any     | `pip3 --version`    |
+| Node.js | 18+     | `node --version`    |
+| npm     | any     | `npm --version`     |
 
 ---
 
@@ -36,17 +36,18 @@ Then open **http://localhost:5173** in your browser.
 
 ## What's Running
 
-| Service | URL | Description |
-|---|---|---|
-| React frontend | http://localhost:5173 | Upload PDFs, view EPUB |
-| FastAPI server | http://localhost:8000 | PDF → EPUB conversion |
-| API docs | http://localhost:8000/docs | Interactive Swagger UI |
+| Service        | URL                        | Description            |
+| -------------- | -------------------------- | ---------------------- |
+| React frontend | http://localhost:5173      | Upload PDFs, view EPUB |
+| FastAPI server | http://localhost:8000      | PDF → EPUB conversion  |
+| API docs       | http://localhost:8000/docs | Interactive Swagger UI |
 
 ---
 
 ## Manual Start (without the script)
 
 **Server:**
+
 ```bash
 cd server
 python3 -m venv .venv
@@ -56,6 +57,7 @@ uvicorn main:app --reload --port 8000
 ```
 
 **Client (separate terminal):**
+
 ```bash
 cd client
 npm install
@@ -88,52 +90,180 @@ npm run dev
 ```
 hitl-pdf-preview/
 ├── server/
-│   ├── main.py          # FastAPI app — POST /convert, GET /health
-│   ├── converter.py     # PDF extraction (pdfminer.six) + EPUB build (ebooklib)
+│   ├── main.py              # FastAPI app — routes, validation, CORS
+│   ├── converter.py         # PDF extraction (pdfminer.six) + EPUB build (ebooklib)
 │   └── requirements.txt
 ├── client/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/
-│   │   │   ├── EpubViewer.tsx      # epub.js integration
-│   │   │   ├── ThumbnailSidebar.tsx
-│   │   │   ├── Toolbar.tsx
-│   │   │   └── UploadZone.tsx
-│   │   ├── hooks/
-│   │   │   ├── useConvert.ts       # POST /api/convert
-│   │   │   └── useEpub.ts          # epub.js lifecycle
-│   │   └── types/index.ts
+│   ├── index.html
 │   ├── vite.config.ts
-│   └── package.json
+│   ├── tsconfig.json
+│   ├── package.json
+│   ├── public/
+│   │   └── pdf.worker.min.mjs        # PDF.js worker
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx                    # Root state router
+│       ├── index.css
+│       ├── components/
+│       │   ├── EpubViewer.tsx         # emoji.js + Toolbar + ThumbnailSidebar
+│       │   ├── PdfViewer.tsx          # PDF.js viewer (placeholder)
+│       │   ├── ExcelViewer.tsx        # Excel viewer (placeholder)
+│       │   ├── ThumbnailSidebar.tsx   # Chapter navigation thumbnails
+│       │   ├── Toolbar.tsx            # Navigation + zoom controls
+│       │   └── UploadZone.tsx         # File drop zone
+│       ├── hooks/
+│       │   ├── useConvert.ts          # PDF upload + EPUB conversion lifecycle
+│       │   └── useEpub.ts             # epub.js book lifecycle + chapter navigation
+│       └── types/
+│           └── index.ts               # TypeScript type definitions
+├── .gitignore
 ├── start.sh
 └── README.md
 ```
 
 ---
 
+## Development
+
+### Setup from scratch
+
+**Server:**
+
+```bash
+cd server
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Client:**
+
+```bash
+cd client
+npm install
+```
+
+### Running tests & linting
+
+**Client linting:**
+
+```bash
+cd client
+npm run lint
+```
+
+### Build for production
+
+**Client:**
+
+```bash
+cd client
+npm run build                       # Outputs to dist/
+```
+
+---
+
+## API Reference
+
+### POST /api/convert
+
+Converts an uploaded PDF to EPUB format.
+
+**Request:**
+
+- Content-Type: `multipart/form-data`
+- Field: `file` (PDF file)
+
+**Response:**
+
+- Content-Type: `application/epub+zip`
+- Body: EPUB file bytes
+
+**Status codes:**
+
+- `200` — Success
+- `400` — Invalid PDF, exceeds size limit, or no text extracted
+- `413` — File too large (> 50 MB)
+- `415` — Unsupported content type
+
+### GET /health
+
+Health check endpoint.
+
+**Response:**
+
+```json
+{ "status": "ok" }
+```
+
+---
+
 ## Spec Alignment
 
-| Component | Spec Reference |
-|---|---|
-| `converter.py` | Architecture §3.2, §5.3 — pdfminer.six + ebooklib |
-| `EpubViewer.tsx` | Architecture §4.2 — epub.js 0.3.x |
-| `ThumbnailSidebar.tsx` | Functional Spec §5.1.2 — thumbnail strip |
+| Component               | Spec Reference                                    |
+| ----------------------- | ------------------------------------------------- |
+| `converter.py`          | Architecture §3.2, §5.3 — pdfminer.six + ebooklib |
+| `EpubViewer.tsx`        | Architecture §4.2 — epub.js 0.3.x                 |
+| `ThumbnailSidebar.tsx`  | Functional Spec §5.1.2 — thumbnail strip          |
 | Typography (Inter font) | Functional Spec §5.1.4 — font.body.family default |
-| FastAPI server | Architecture §3.2 — Python 3.12 + FastAPI 0.115 |
+| FastAPI server          | Architecture §3.2 — Python 3.12 + FastAPI 0.115   |
 
 ---
 
 ## Known Limitations
 
-| Issue | Notes |
-|---|---|
+| Issue                        | Notes                                     |
+| ---------------------------- | ----------------------------------------- |
 | Scanned PDFs (no text layer) | Will return a 400 error; OCR not included |
-| PDF images | Not extracted in this version; text only |
-| Multi-column layouts | Text extracted linearly; order may vary |
-| Large PDFs (200+ pages) | Conversion may take 10–20 seconds |
+| PDF images                   | Not extracted in this version; text only  |
+| Multi-column layouts         | Text extracted linearly; order may vary   |
+| Large PDFs (200+ pages)      | Conversion may take 10–20 seconds         |
 
 These limitations are documented in the **Local PDF Preview App Plan** and will be addressed in the full EPUB Conversion Service (Implementation Plan Phase 4).
 
 ---
 
-*HITL Module — Local PDF Preview v0.1.0 | April 2026*
+## Troubleshooting
+
+### Port 8000/5173 already in use
+
+```bash
+# Kill process on port 8000 (macOS/Linux)
+lsof -i :8000 | grep LISTEN | awk '{print $2}' | xargs kill -9
+
+# Or specify different ports
+uvicorn main:app --port 8001
+npm run dev -- --port 5174
+```
+
+### CORS errors
+
+Ensure the React dev server is running on port 5173 (or update the CORS whitelist in `main.py`).
+
+### Virtual environment not activating
+
+- macOS/Linux: Use `source .venv/bin/activate`
+- Windows: Use `.venv\Scripts\activate`
+
+### PDF conversion timeout
+
+Large PDFs (200+ pages) may take 20+ seconds. Wait for the conversion to complete; check console for error messages.
+
+### `.venv/` tracked in git
+
+If `.venv/` was accidentally committed before `.gitignore` was added:
+
+```bash
+git rm -r --cached server/.venv client/node_modules
+git commit -m "Remove venv and node_modules from tracking"
+```
+
+---
+
+## Contributing
+
+This is the first MVP of the HITL Module. For feature requests, bug reports, or contributions, refer to the project specifications and implementation plan in the root directory.
+
+---
+
+_HITL Module — Local PDF Preview v0.1.0 | April 2026_

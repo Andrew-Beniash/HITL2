@@ -21,7 +21,10 @@ export function UploadZone({ onFile, isConverting, errorMessage }: Props) {
       lower.endsWith('.xls') ||
       file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       file.type === 'application/vnd.ms-excel'
-    if (!isPdf && !isMarkdown && !isEpub && !isExcel) return
+    const isWord =
+      lower.endsWith('.docx') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    if (!isPdf && !isMarkdown && !isEpub && !isExcel && !isWord) return
     onFile(file)
   }
 
@@ -49,7 +52,7 @@ export function UploadZone({ onFile, isConverting, errorMessage }: Props) {
       <input
         id={INPUT_ID}
         type="file"
-        accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.xlsx,.xls,text/markdown,.md,.markdown,application/epub+zip,.epub"
+        accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.xlsx,.xls,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/markdown,.md,.markdown,application/epub+zip,.epub"
         style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
         onChange={onInputChange}
         disabled={isConverting}
@@ -64,7 +67,7 @@ export function UploadZone({ onFile, isConverting, errorMessage }: Props) {
           </svg>
         </div>
         <h1 style={titleStyle}>Document Preview</h1>
-        <p style={subtitleStyle}>Open a PDF, Excel, Markdown, or EPUB file to get started</p>
+        <p style={subtitleStyle}>Open a PDF, Word, Excel, Markdown, or EPUB file to get started</p>
       </div>
 
       {/* Drop card */}
@@ -93,7 +96,7 @@ export function UploadZone({ onFile, isConverting, errorMessage }: Props) {
               </svg>
             </div>
             <p style={{ ...dropMainTextStyle, color: dragging ? '#007AFF' : '#1d1d1f' }}>
-              {dragging ? 'Drop to open' : 'Drop PDF, Excel, Markdown, or EPUB here'}
+              {dragging ? 'Drop to open' : 'Drop PDF, Word, Excel, Markdown, or EPUB here'}
             </p>
             <p style={dropSubTextStyle}>or click to browse your files</p>
           </div>
@@ -124,7 +127,7 @@ export function UploadZone({ onFile, isConverting, errorMessage }: Props) {
         </div>
       )}
 
-      <p style={hintStyle}>PDF, Excel (.xlsx/.xls), and Markdown convert to EPUB · Native EPUB opens directly</p>
+      <p style={hintStyle}>PDF, Word (.docx), Excel (.xlsx/.xls), and Markdown supported · EPUB opens directly</p>
     </div>
   )
 }
