@@ -178,12 +178,21 @@ async def convert(
     epub_filename = f"{stem}.epub"
     logger.info("Converted '%s' → '%s' (%d KB)", filename, epub_filename, len(epub_bytes) // 1024)
 
+    # Content-Disposition requires ASCII/latin-1; use RFC 5987 for non-ASCII names.
+    try:
+        epub_filename.encode("latin-1")
+        disposition = f'attachment; filename="{epub_filename}"'
+    except UnicodeEncodeError:
+        from urllib.parse import quote
+        safe_ascii = epub_filename.encode("ascii", errors="replace").decode("ascii")
+        encoded = quote(epub_filename, encoding="utf-8")
+        disposition = f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded}'
+
     return Response(
         content=epub_bytes,
         media_type="application/epub+zip",
         headers={
-            "Content-Disposition": f'attachment; filename="{epub_filename}"',
-            "X-Source-Filename": filename,
+            "Content-Disposition": disposition,
             "X-Epub-Size": str(len(epub_bytes)),
         },
     )
