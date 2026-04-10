@@ -1,5 +1,6 @@
-import { ReactNode, useCallback } from 'react'
+import { ReactNode, useCallback, useState, useEffect, useRef } from 'react'
 import { ChatPanel, ChatMessage } from './ChatPanel'
+import { SelectionMenu } from './SelectionMenu'
 
 interface Props {
   filename: string | null
@@ -7,14 +8,66 @@ interface Props {
   children: ReactNode
 }
 
-/**
- * Wraps any document viewer with the collapsible ChatPanel on the right.
- * Streams replies from the server's /api/chat endpoint (OpenAI SSE).
- */
+interface SelectionState {
+  text: string
+  x: number
+  y: number
+}
+
 // Truncate document text to avoid exceeding context limits (~100k chars ≈ ~25k tokens)
 const MAX_CONTEXT_CHARS = 100_000
+// Selections shorter than this are likely accidental double-clicks
+const MIN_SELECTION_LENGTH = 3
+
+function makeKey() {
+  return Math.random().toString(36).slice(2)
+}
 
 export function ViewerLayout({ filename, documentText, children }: Props) {
+  const [selection, setSelection] = useState<SelectionState | null>(null)
+  const [pendingMessage, setPendingMessage] = useState<{ text: string; key: string } | undefined>()
+  const viewerRef = useRef<HTMLDivElement>(null)
+
+  // Detect text selection inside the viewer pane
+  useEffect(() => {
+    const onMouseUp = (e: MouseEvent) => {
+      // Ignore clicks inside the chat panel
+      const chatEl = document.getElementById('chat-panel-root')
+      if (chatEl?.contains(e.target as Node)) return
+
+      setTimeout(() => {
+        const sel = window.getSelection()
+        const text = sel?.toString().trim() ?? ''
+        if (text.length < MIN_SELECTION_LENGTH) {
+          setSelection(null)
+          return
+        }
+        // Anchor the menu at the end of the selection range
+        const range = sel!.getRangeAt(0)
+        const rect = range.getBoundingClientRect()
+        setSelection({
+          text,
+          x: rect.left + rect.width / 2,
+          y: rect.top,        // menu renders above this point
+        })
+      }, 0)
+    }
+
+    document.addEventListener('mouseup', onMouseUp)
+    return () => document.removeEventListener('mouseup', onMouseUp)
+  }, [])
+
+  const dismissMenu = useCallback(() => setSelection(null), [])
+
+  const handleExplain = useCallback(() => {
+    if (!selection) return
+    const msg = `Please explain the following text from the document:\n\n"${selection.text}"`
+    setPendingMessage({ text: msg, key: makeKey() })
+    setSelection(null)
+    // Clear the browser selection so it doesn't linger
+    window.getSelection()?.removeAllRanges()
+  }, [selection])
+
   const handleSend = useCallback(
     async (message: string, history: ChatMessage[]): Promise<AsyncIterable<string>> => {
       const res = await fetch('/api/chat', {
@@ -35,7 +88,6 @@ export function ViewerLayout({ filename, documentText, children }: Props) {
         throw new Error(body.detail ?? `Server error ${res.status}`)
       }
 
-      // Return an AsyncIterable that reads the SSE stream and yields token chunks
       return sseToIterable(res)
     },
     [filename, documentText]
@@ -43,22 +95,77 @@ export function ViewerLayout({ filename, documentText, children }: Props) {
 
   return (
     <div style={layoutStyle}>
-      <div style={viewerStyle}>{children}</div>
-      <div style={chatWrapStyle}>
-        <ChatPanel filename={filename} onSend={handleSend} />
+      <div ref={viewerRef} style={viewerStyle}>{children}</div>
+
+      <div id="chat-panel-root" style={chatWrapStyle}>
+        <ChatPanel
+          filename={filename}
+          onSend={handleSend}
+          pendingMessage={pendingMessage}
+        />
       </div>
+
+      {selection && (
+        <SelectionMenu
+          x={selection.x}
+          y={selection.y}
+          onDismiss={dismissMenu}
+          items={[
+            {
+              label: 'Explain selection',
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              ),
+              onClick: handleExplain,
+            },
+            {
+              label: 'Summarise selection',
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="21" y1="10" x2="3" y2="10"/>
+                  <line x1="21" y1="6" x2="3" y2="6"/>
+                  <line x1="21" y1="14" x2="3" y2="14"/>
+                  <line x1="21" y1="18" x2="11" y2="18"/>
+                </svg>
+              ),
+              onClick: () => {
+                if (!selection) return
+                setPendingMessage({
+                  text: `Please summarise the following text:\n\n"${selection.text}"`,
+                  key: makeKey(),
+                })
+                setSelection(null)
+                window.getSelection()?.removeAllRanges()
+              },
+            },
+            {
+              label: 'Ask about selection',
+              icon: (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              ),
+              onClick: () => {
+                if (!selection) return
+                setPendingMessage({
+                  text: `Regarding this text from the document: "${selection.text}"\n\n`,
+                  key: makeKey() + '~ask',   // ~ask suffix → pre-fill only, don't auto-send
+                })
+                setSelection(null)
+                window.getSelection()?.removeAllRanges()
+              },
+            },
+          ]}
+        />
+      )}
     </div>
   )
 }
 
-/**
- * Converts a fetch Response carrying a text/event-stream (SSE) into an
- * AsyncIterable<string> that yields one token chunk per event.
- *
- * Expected event format:  data: {"delta":"..."}
- * End-of-stream marker:   data: {"done":true}
- * Error marker:           data: {"error":"..."}
- */
 async function* sseToIterable(res: Response): AsyncIterable<string> {
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
@@ -71,7 +178,7 @@ async function* sseToIterable(res: Response): AsyncIterable<string> {
       buffer += decoder.decode(value, { stream: true })
 
       const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''   // keep incomplete last line
+      buffer = lines.pop() ?? ''
 
       for (const line of lines) {
         const trimmed = line.trim()

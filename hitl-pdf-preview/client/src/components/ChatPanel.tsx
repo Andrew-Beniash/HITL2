@@ -15,6 +15,11 @@ interface Props {
    * (streaming — each yielded value is appended to the assistant bubble).
    */
   onSend?: (message: string, history: ChatMessage[]) => Promise<string | AsyncIterable<string>>
+  /**
+   * When set, the panel opens, pre-fills the message, and sends it automatically.
+   * Pass a new object reference each time to trigger (use a counter or uuid as key).
+   */
+  pendingMessage?: { text: string; key: string }
 }
 
 const PANEL_WIDTH = 320
@@ -23,7 +28,7 @@ function makeId() {
   return Math.random().toString(36).slice(2)
 }
 
-export function ChatPanel({ filename, onSend }: Props) {
+export function ChatPanel({ filename, onSend, pendingMessage }: Props) {
   const [open, setOpen] = useState(true)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -44,24 +49,23 @@ export function ChatPanel({ filename, onSend }: Props) {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }, [input])
 
-  const send = useCallback(async () => {
-    const text = input.trim()
-    if (!text || loading) return
+  // Core send logic — accepts text directly so it can be called from both
+  // the textarea submit and the pendingMessage auto-send path.
+  const sendText = useCallback(async (text: string) => {
+    if (!text.trim() || loading) return
 
-    const userMsg: ChatMessage = { id: makeId(), role: 'user', text, ts: new Date() }
+    const userMsg: ChatMessage = { id: makeId(), role: 'user', text: text.trim(), ts: new Date() }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setLoading(true)
 
     const assistantId = makeId()
-    // Insert empty assistant bubble immediately so user sees it filling
     setMessages(prev => [...prev, { id: assistantId, role: 'assistant', text: '', ts: new Date() }])
 
     try {
       const history = [...messages, userMsg]
 
       if (!onSend) {
-        // Placeholder
         await new Promise(r => setTimeout(r, 600))
         setMessages(prev => prev.map(m =>
           m.id === assistantId
@@ -69,11 +73,10 @@ export function ChatPanel({ filename, onSend }: Props) {
             : m
         ))
       } else {
-        const result = await onSend(text, history)
+        const result = await onSend(text.trim(), history)
         if (typeof result === 'string') {
           setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, text: result } : m))
         } else {
-          // Streaming: accumulate tokens into the bubble
           for await (const chunk of result) {
             setMessages(prev => prev.map(m =>
               m.id === assistantId ? { ...m, text: m.text + chunk } : m
@@ -90,7 +93,24 @@ export function ChatPanel({ filename, onSend }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [input, loading, messages, onSend])
+  }, [loading, messages, onSend])
+
+  const send = useCallback(() => sendText(input), [input, sendText])
+
+  // Auto-send injected messages (e.g. "Explain selection")
+  // pendingMessage.key changes each time — used as the effect trigger.
+  // "Ask about selection" sets text but doesn't auto-send (key ends with '~ask').
+  useEffect(() => {
+    if (!pendingMessage) return
+    setOpen(true)
+    if (pendingMessage.key.endsWith('~ask')) {
+      // Pre-fill only — let user finish the question
+      setInput(pendingMessage.text)
+    } else {
+      setInput('')
+      sendText(pendingMessage.text)
+    }
+  }, [pendingMessage?.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
