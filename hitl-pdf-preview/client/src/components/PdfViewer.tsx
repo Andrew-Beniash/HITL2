@@ -8,13 +8,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 interface Props {
   file: File
   onOpenNew: () => void
+  onTextExtracted?: (text: string) => void
 }
 
 const MIN_ZOOM = 50
 const MAX_ZOOM = 200
 const ZOOM_STEP = 15
 
-export function PdfViewer({ file, onOpenNew }: Props) {
+export function PdfViewer({ file, onOpenNew, onTextExtracted }: Props) {
   const [numPages, setNumPages] = useState(0)
   const [zoom, setZoom] = useState(100)
   const [error, setError] = useState<string | null>(null)
@@ -63,10 +64,28 @@ export function PdfViewer({ file, onOpenNew }: Props) {
     file.arrayBuffer().then(buf => {
       if (cancelled) return
       return pdfjsLib.getDocument({ data: buf }).promise
-    }).then(pdf => {
+    }).then(async pdf => {
       if (!pdf || cancelled) return
       pdfRef.current = pdf
       setNumPages(pdf.numPages)
+
+      // Extract plain text for chat context (background, non-blocking)
+      if (onTextExtracted) {
+        try {
+          const parts: string[] = []
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i)
+            const content = await page.getTextContent()
+            const pageText = content.items
+              .map((item: unknown) => (item as { str: string }).str)
+              .join(' ')
+            parts.push(`[Page ${i}]\n${pageText}`)
+          }
+          onTextExtracted(parts.join('\n\n'))
+        } catch {
+          // Text extraction failure is non-fatal
+        }
+      }
     }).catch(err => {
       if (!cancelled) setError(`Failed to load PDF: ${err?.message ?? err}`)
     })

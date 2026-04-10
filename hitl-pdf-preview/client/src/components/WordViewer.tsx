@@ -4,13 +4,14 @@ import mammoth from 'mammoth'
 interface Props {
   file: File
   onOpenNew: () => void
+  onTextExtracted?: (text: string) => void
 }
 
 const MIN_ZOOM = 50
 const MAX_ZOOM = 200
 const ZOOM_STEP = 15
 
-export function WordViewer({ file, onOpenNew }: Props) {
+export function WordViewer({ file, onOpenNew, onTextExtracted }: Props) {
   const [html, setHtml] = useState<string>('')
   const [messages, setMessages] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +53,19 @@ export function WordViewer({ file, onOpenNew }: Props) {
         .filter(m => m.type === 'warning')
         .map(m => m.message)
       setMessages(warnings)
+
+      // Strip HTML tags to get plain text for chat context
+      if (onTextExtracted && result.value) {
+        const plain = result.value
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/p>|<\/h[1-6]>|<\/li>|<\/tr>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&nbsp;/g, ' ').replace(/&quot;/g, '"')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+        onTextExtracted(plain)
+      }
     }).catch(err => {
       setError(`Failed to load document: ${err?.message ?? err}`)
     })

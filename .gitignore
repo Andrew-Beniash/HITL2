@@ -1,0 +1,11 @@
+# Python
+hitl-pdf-preview/server/.venv/
+hitl-pdf-preview/server/__pycache__/
+hitl-pdf-preview/server/*.pyc
+
+# Node
+hitl-pdf-preview/client/node_modules/
+hitl-pdf-preview/client/dist/
+
+# Secrets — never commit real keys
+hitl-pdf-preview/server/.env

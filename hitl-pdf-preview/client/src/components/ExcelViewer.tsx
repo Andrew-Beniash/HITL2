@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 interface Props {
   file: File
   onOpenNew: () => void
+  onTextExtracted?: (text: string) => void
 }
 
 interface SheetData {
@@ -13,7 +14,7 @@ interface SheetData {
 
 const MAX_COLS = 500  // safety cap for pathological sheets
 
-export function ExcelViewer({ file, onOpenNew }: Props) {
+export function ExcelViewer({ file, onOpenNew, onTextExtracted }: Props) {
   const [sheets, setSheets] = useState<SheetData[]>([])
   const [activeIdx, setActiveIdx] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -45,10 +46,21 @@ export function ExcelViewer({ file, onOpenNew }: Props) {
         }
       })
       setSheets(parsed)
+
+      // Serialize all sheets to tab-separated text for chat context
+      if (onTextExtracted) {
+        const parts = parsed
+          .filter(s => s.rows.length > 0)
+          .map(s => {
+            const tableText = s.rows.map(r => r.join('\t')).join('\n')
+            return `[Sheet: ${s.name}]\n${tableText}`
+          })
+        onTextExtracted(parts.join('\n\n'))
+      }
     }).catch(err => {
       setError(`Failed to load workbook: ${err?.message ?? err}`)
     })
-  }, [file])
+  }, [file, onTextExtracted])
 
   const sheet = sheets[activeIdx]
   const maxCols = sheet ? Math.max(0, ...sheet.rows.map(r => r.length)) : 0
